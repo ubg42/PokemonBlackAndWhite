@@ -1,0 +1,69 @@
+<html>
+<head>
+    <title>Pokemon Black</title>
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        #game {
+            width: 100vw;
+            height: 100vh;
+        }
+    </style>
+</head>
+<body>
+<div id="game"></div>
+
+<script>
+    EJS_player = "#game";
+    EJS_core = "nds"
+    EJS_pathtodata = "/data/";
+
+    async function load3DS() {
+        const parts = [
+            "Pokemon_Black.nds.part01",
+            "Pokemon_Black.nds.part02",
+            "Pokemon_Black.nds.part03",
+            "Pokemon_Black.nds.part04",
+            "Pokemon_Black.nds.part05",
+            "Pokemon_Black.nds.part06",
+            "Pokemon_Black.nds.part07",
+            "Pokemon_Black.nds.part08",
+            "Pokemon_Black.nds.part09",
+            "Pokemon_Black.nds.part10",
+            "Pokemon_Black.nds.part11"
+        ];
+
+        const buffers = [];
+
+        for (const part of parts) {
+            console.log("Loading:", part);
+
+            const response = await fetch(part);
+
+            if (!response.ok) {
+                throw new Error(`Failed to load ${part}: ${response.status}`);
+            }
+
+            buffers.push(await response.arrayBuffer());
+        }
+
+        const rom = new Blob(buffers, {
+            type: "application/octet-stream"
+        });
+
+        EJS_gameUrl = URL.createObjectURL(rom);
+
+        const script = document.createElement("script");
+        script.src = EJS_pathtodata + "loader.js";
+        document.body.appendChild(script);
+    }
+
+    load3DS().catch(console.error);
+</script>
+</body>
+</html>
