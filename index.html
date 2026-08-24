@@ -17,6 +17,62 @@
             width: 100vw;
             height: 100vh;
         }
+
+        #loading {
+            position: fixed;
+            inset: 0;
+            z-index: 9999;
+
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+
+            background: #111;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        #loading h2 {
+            margin-bottom: 10px;
+        }
+
+        #status {
+            margin: 5px;
+            font-size: 16px;
+        }
+
+        #progressText {
+            margin: 5px;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        #progressContainer {
+            width: min(600px, 80vw);
+            height: 20px;
+            margin-top: 15px;
+
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        #progressBar {
+            width: 0%;
+            height: 100%;
+
+            background: #4caf50;
+            transition: width 0.15s ease;
+        }
+
+        #error {
+            display: none;
+            color: #ff5555;
+            max-width: 80%;
+            text-align: center;
+            white-space: pre-wrap;
+        }
     </style>
 </head>
 
@@ -24,79 +80,276 @@
 
 <div id="game"></div>
 
+<div id="loading">
+    <h2>Pokemon Black</h2>
+
+    <div id="status">
+        Preparing...
+    </div>
+
+    <div id="progressText">
+        0 / 11 parts
+    </div>
+
+    <div id="progressContainer">
+        <div id="progressBar"></div>
+    </div>
+
+    <div id="error"></div>
+</div>
+
 <script>
     EJS_player = "#game";
-    EJS_core = "nds";
+    EJS_core = "azahar";
+
     EJS_pathtodata = "./data/";
 
-    async function loadNDS() {
+    EJS_forceLegacyCores = false;
 
-        const base = "./roms/Pokemon_Black.nds";
+    const loading = document.getElementById("loading");
+    const status = document.getElementById("status");
+    const progressText = document.getElementById("progressText");
+    const progressBar = document.getElementById("progressBar");
+    const errorBox = document.getElementById("error");
 
-        const parts = [
-            ".part01",
-            ".part02",
-            ".part03",
-            ".part04",
-            ".part05",
-            ".part06",
-            ".part07",
-            ".part08",
-            ".part09",
-            ".part10",
-            ".part11"
-        ];
+    function setProgress(percent) {
+        progressBar.style.width = percent + "%";
+    }
+
+    function showError(message) {
+        status.style.display = "none";
+        progressText.style.display = "none";
+        document.getElementById("progressContainer").style.display = "none";
+
+        errorBox.style.display = "block";
+        errorBox.textContent = message;
+    }
+
+    async function load3DS() {
+
+        const TOTAL_PARTS = 11;
+
+        const parts = [];
+
+        // Create .part01 through .part11
+        for (let i = 1; i <= TOTAL_PARTS; i++) {
+            parts.push(
+                "./roms/Pokemon_Black.nds.part"," +
+                String(i).padStart(2, "0")
+            );
+        }
 
         const buffers = [];
 
-        for (const extension of parts) {
+        // =====================================
+        // Download parts
+        // =====================================
 
-            const url = base + extension;
+        for (let i = 0; i < parts.length; i++) {
 
-            console.log("Loading:", url);
+            const url = parts[i];
+            const partNumber = i + 1;
+
+            status.textContent =
+                "Downloading part " +
+                partNumber +
+                " of " +
+                TOTAL_PARTS +
+                "...";
+
+            progressText.textContent =
+                partNumber +
+                " / " +
+                TOTAL_PARTS +
+                " parts";
 
             const response = await fetch(url);
 
             if (!response.ok) {
                 throw new Error(
-                    `Failed to load ${url}: ${response.status}`
+                    "Failed to load part " +
+                    partNumber +
+                    " (HTTP " +
+                    response.status +
+                    ")\n" +
+                    url
                 );
             }
 
-            const buffer = await response.arrayBuffer();
+            const contentLength =
+                response.headers.get("Content-Length");
 
-            console.log(
-                "Loaded:",
-                url,
-                buffer.byteLength,
-                "bytes"
+            const expectedSize =
+                contentLength
+                    ? Number(contentLength)
+                    : 0;
+
+            if (response.body) {
+
+                const reader =
+                    response.body.getReader();
+
+                const chunks = [];
+
+                let received = 0;
+
+                while (true) {
+
+                    const { done, value } =
+                        await reader.read();
+
+                    if (done)
+                        break;
+
+                    chunks.push(value);
+
+                    received += value.length;
+
+                    if (expectedSize > 0) {
+
+                        const partPercent =
+                            received / expectedSize;
+
+                        const overallPercent =
+                            (
+                                (i + partPercent) /
+                                TOTAL_PARTS
+                            ) * 100;
+
+                        setProgress(
+                            Math.min(
+                                100,
+                                overallPercent
+                            )
+                        );
+
+                        progressText.textContent =
+                            "Part " +
+                            partNumber +
+                            "/" +
+                            TOTAL_PARTS +
+                            " — " +
+                            Math.round(
+                                partPercent * 100
+                            ) +
+                            "%";
+                    }
+                }
+
+                const partBlob =
+                    new Blob(chunks);
+
+                const buffer =
+                    await partBlob.arrayBuffer();
+
+                buffers.push(buffer);
+
+            } else {
+
+                const buffer =
+                    await response.arrayBuffer();
+
+                buffers.push(buffer);
+
+                setProgress(
+                    (partNumber /
+                        TOTAL_PARTS) * 100
+                );
+            }
+
+            setProgress(
+                (partNumber /
+                    TOTAL_PARTS) * 100
             );
-
-            buffers.push(buffer);
         }
 
-        console.log("Combining ROM parts...");
+        // =====================================
+        // Join ROM
+        // =====================================
 
-        const rom = new Blob(buffers, {
-            type: "application/octet-stream"
-        });
+        status.textContent =
+            "Combining ROM parts...";
 
-        const romURL = URL.createObjectURL(rom);
+        progressText.textContent =
+            "Preparing Tomodachi Life...";
 
-        console.log("Combined ROM:", rom.size, "bytes");
+        setProgress(100);
 
-        EJS_gameUrl = romURL;
+        const romBlob =
+            new Blob(buffers, {
+                type: "application/octet-stream"
+            });
 
-        const script = document.createElement("script");
+        const romFile =
+            new File(
+                [romBlob],
+                "Tomodachi_Life.3ds",
+                {
+                    type:
+                        "application/octet-stream"
+                }
+            );
 
-        script.src = EJS_pathtodata + "loader.js";
+        // =====================================
+        // Create ROM URL
+        // =====================================
+
+        EJS_gameUrl =
+            URL.createObjectURL(romFile);
+
+        // =====================================
+        // Start EmulatorJS
+        // =====================================
+
+        status.textContent =
+            "Starting Azahar...";
+
+        progressText.textContent =
+            "Loading emulator...";
+
+        const script =
+            document.createElement("script");
+
+        script.src =
+            EJS_pathtodata +
+            "loader.js";
+
+        script.onload = function () {
+
+            console.log(
+                "EmulatorJS loader loaded."
+            );
+
+            setTimeout(() => {
+
+                loading.style.display =
+                    "none";
+
+            }, 1000);
+        };
+
+        script.onerror = function () {
+
+            showError(
+                "Failed to load EmulatorJS:\n" +
+                script.src
+            );
+        };
 
         document.body.appendChild(script);
     }
 
-    loadNDS().catch(error => {
-        console.error("ROM loading failed:", error);
+    // Start
+    load3DS().catch(error => {
+
+        console.error(error);
+
+        showError(
+            "Failed to load Tomodachi Life:\n\n" +
+            error.message
+        );
     });
+
 </script>
 
 </body>
