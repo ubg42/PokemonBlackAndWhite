@@ -1,12 +1,16 @@
+<!DOCTYPE html>
 <html>
 <head>
     <title>Pokemon Black</title>
+
     <style>
-        body, html {
+        html, body {
             margin: 0;
             padding: 0;
             width: 100%;
             height: 100%;
+            overflow: hidden;
+            background: #000;
         }
 
         #game {
@@ -15,55 +19,85 @@
         }
     </style>
 </head>
+
 <body>
+
 <div id="game"></div>
 
 <script>
     EJS_player = "#game";
-    EJS_core = "nds"
-    EJS_pathtodata = "/data/";
+    EJS_core = "nds";
+    EJS_pathtodata = "./data/";
 
-    async function load3DS() {
+    async function loadNDS() {
+
+        const base = "./roms/Pokemon_Black.nds";
+
         const parts = [
-            "Pokemon_Black.nds.part01",
-            "Pokemon_Black.nds.part02",
-            "Pokemon_Black.nds.part03",
-            "Pokemon_Black.nds.part04",
-            "Pokemon_Black.nds.part05",
-            "Pokemon_Black.nds.part06",
-            "Pokemon_Black.nds.part07",
-            "Pokemon_Black.nds.part08",
-            "Pokemon_Black.nds.part09",
-            "Pokemon_Black.nds.part10",
-            "Pokemon_Black.nds.part11"
+            ".part01",
+            ".part02",
+            ".part03",
+            ".part04",
+            ".part05",
+            ".part06",
+            ".part07",
+            ".part08",
+            ".part09",
+            ".part10",
+            ".part11"
         ];
 
         const buffers = [];
 
-        for (const part of parts) {
-            console.log("Loading:", part);
+        for (const extension of parts) {
 
-            const response = await fetch(part);
+            const url = base + extension;
+
+            console.log("Loading:", url);
+
+            const response = await fetch(url);
 
             if (!response.ok) {
-                throw new Error(`Failed to load ${part}: ${response.status}`);
+                throw new Error(
+                    `Failed to load ${url}: ${response.status}`
+                );
             }
 
-            buffers.push(await response.arrayBuffer());
+            const buffer = await response.arrayBuffer();
+
+            console.log(
+                "Loaded:",
+                url,
+                buffer.byteLength,
+                "bytes"
+            );
+
+            buffers.push(buffer);
         }
+
+        console.log("Combining ROM parts...");
 
         const rom = new Blob(buffers, {
             type: "application/octet-stream"
         });
 
-        EJS_gameUrl = URL.createObjectURL(rom);
+        const romURL = URL.createObjectURL(rom);
+
+        console.log("Combined ROM:", rom.size, "bytes");
+
+        EJS_gameUrl = romURL;
 
         const script = document.createElement("script");
+
         script.src = EJS_pathtodata + "loader.js";
+
         document.body.appendChild(script);
     }
 
-    load3DS().catch(console.error);
+    loadNDS().catch(error => {
+        console.error("ROM loading failed:", error);
+    });
 </script>
+
 </body>
 </html>
